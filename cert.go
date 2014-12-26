@@ -57,7 +57,7 @@ type Certificate struct {
 }
 
 type CertificateInfo struct {
-	Serial       int
+	Serial       int64
 	Issued       time.Duration
 	Expires      time.Duration
 	Country      string
@@ -193,7 +193,7 @@ func (c *Certificate) SetIssuerName(name *Name) error {
 }
 
 // SetSerial sets the serial of a certificate.
-func (c *Certificate) SetSerial(serial int) error {
+func (c *Certificate) SetSerial(serial int64) error {
 	if C.ASN1_INTEGER_set(C.X509_get_serialNumber(c.x), C.long(serial)) != 1 {
 		return errors.New("failed to set serial")
 	}
