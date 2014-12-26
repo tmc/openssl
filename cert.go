@@ -232,18 +232,6 @@ func (c *Certificate) SetPubKey(pubKey PublicKey) error {
 // Sign a certificate using a private key and a digest name.
 // Accepted digest names are 'sha256', 'sha384', and 'sha512'.
 func (c *Certificate) Sign(privKey PrivateKey, digest EVP_MD) error {
-	switch digest {
-	case EVP_SHA256:
-	case EVP_SHA384:
-	case EVP_SHA512:
-	default:
-		return errors.New("Unsupported digest" +
-			"You're probably looking for 'EVP_SHA256' or 'EVP_SHA512'.")
-	}
-	return c.insecureSign(privKey, digest)
-}
-
-func (c *Certificate) insecureSign(privKey PrivateKey, digest EVP_MD) error {
 	var md *C.EVP_MD
 	switch digest {
 	// please don't use these digest functions
