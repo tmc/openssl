@@ -118,14 +118,23 @@ func NewCertificate(info *CertificateInfo, key PublicKey) (*Certificate, error) 
 	if err != nil {
 		return nil, err
 	}
-	err = name.AddTextEntries(map[string]string{
-		"C":  info.Country,
-		"O":  info.Organization,
-		"CN": info.CommonName,
-	})
+
+	entries := make(map[string]string)
+	if len(info.Country) > 0 {
+		entries["C"] = info.Country
+	}
+	if len(info.Organization) > 0 {
+		entries["O"] = info.Organization
+	}
+	if len(info.CommonName) > 0 {
+		entries["CN"] = info.CommonName
+	}
+
+	err = name.AddTextEntries(entries)
 	if err != nil {
 		return nil, err
 	}
+
 	// self-issue for now
 	if err := c.SetIssuerName(name); err != nil {
 		return nil, err
