@@ -326,6 +326,27 @@ func LoadCertificateFromPEM(pem_block []byte) (*Certificate, error) {
 	return x, nil
 }
 
+// LoadCertificateFromDER loads an X509 certificate from a ASN.1 DER-encoded block.
+func LoadCertificateFromDER(pem_block []byte) (*Certificate, error) {
+	if len(pem_block) == 0 {
+		return nil, errors.New("empty pem block")
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	bio := C.BIO_new_mem_buf(unsafe.Pointer(&pem_block[0]),
+		C.int(len(pem_block)))
+	cert := C.d2i_X509_bio(bio, nil)
+	C.BIO_free(bio)
+	if cert == nil {
+		return nil, errorFromErrorQueue()
+	}
+	x := &Certificate{x: cert}
+	runtime.SetFinalizer(x, func(x *Certificate) {
+		C.X509_free(x.x)
+	})
+	return x, nil
+}
+
 // MarshalPEM converts the X509 certificate to PEM-encoded format
 func (c *Certificate) MarshalPEM() (pem_block []byte, err error) {
 	bio := C.BIO_new(C.BIO_s_mem())
