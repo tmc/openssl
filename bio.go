@@ -66,6 +66,7 @@ import "C"
 
 import (
 	"errors"
+	"github.com/tvdw/cgolock"
 	"io"
 	"reflect"
 	"sync"
@@ -310,7 +311,9 @@ func (b *readBio) ReadFromOnce(r io.Reader) (n int, err error) {
 }
 
 func (b *readBio) MakeCBIO() *C.BIO {
+	cgolock.Lock()
 	rv := C.BIO_new(C.BIO_s_readBio())
+	cgolock.Unlock()
 	rv.ptr = unsafe.Pointer(b)
 	return rv
 }
@@ -335,7 +338,9 @@ func (b *anyBio) Read(buf []byte) (n int, err error) {
 	if len(buf) == 0 {
 		return 0, nil
 	}
+	cgolock.Lock()
 	n = int(C.BIO_read((*C.BIO)(b), unsafe.Pointer(&buf[0]), C.int(len(buf))))
+	cgolock.Unlock()
 	if n <= 0 {
 		return 0, io.EOF
 	}
@@ -346,8 +351,10 @@ func (b *anyBio) Write(buf []byte) (written int, err error) {
 	if len(buf) == 0 {
 		return 0, nil
 	}
+	cgolock.Lock()
 	n := int(C.BIO_write((*C.BIO)(b), unsafe.Pointer(&buf[0]),
 		C.int(len(buf))))
+	cgolock.Unlock()
 	if n != len(buf) {
 		return n, errors.New("BIO write failed")
 	}

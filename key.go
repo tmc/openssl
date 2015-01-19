@@ -49,6 +49,7 @@ import (
 type Method *C.EVP_MD
 
 var (
+	SHA1_Method   Method = C.EVP_sha1()
 	SHA256_Method Method = C.EVP_sha256()
 )
 
@@ -80,6 +81,7 @@ type PrivateKey interface {
 
 	// Signs the data using PKCS1.15
 	SignPKCS1v15(Method, []byte) ([]byte, error)
+	PrivateEncrypt([]byte) ([]byte, error)
 
 	// MarshalPKCS1PrivateKeyPEM converts the private key to PEM-encoded PKCS1
 	// format
@@ -88,6 +90,8 @@ type PrivateKey interface {
 	// MarshalPKCS1PrivateKeyDER converts the private key to DER-encoded PKCS1
 	// format
 	MarshalPKCS1PrivateKeyDER() (der_block []byte, err error)
+
+	Decrypt([]byte) ([]byte, error)
 }
 
 type pKey struct {
@@ -117,6 +121,28 @@ func (key *pKey) SignPKCS1v15(method Method, data []byte) ([]byte, error) {
 		return nil, errors.New("signpkcs1v15: failed to finalize signature")
 	}
 	return sig[:sigblen], nil
+}
+
+func (key *pKey) PrivateEncrypt(data []byte) ([]byte, error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	rsa := C.EVP_PKEY_get1_RSA(key.key)
+	if rsa == nil {
+		return nil, errors.New("not an rsa key")
+	}
+	defer C.RSA_free(rsa)
+
+	returnSize := int(C.RSA_size(rsa))
+	buf := make([]byte, returnSize)
+
+	rt := int(C.RSA_private_encrypt(C.int(len(data)), (*C.uchar)(unsafe.Pointer(&data[0])), (*C.uchar)(unsafe.Pointer(&buf[0])), rsa, C.RSA_PKCS1_PADDING))
+	if rt < 0 {
+		return nil, errorFromErrorQueue()
+	}
+
+	buf = buf[:rt]
+	return buf, nil
 }
 
 func (key *pKey) VerifyPKCS1v15(method Method, data, sig []byte) error {

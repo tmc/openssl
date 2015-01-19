@@ -31,6 +31,17 @@ package openssl
 // const char * SSL_get_cipher_name_not_a_macro(const SSL *ssl) {
 //    return SSL_get_cipher_name(ssl);
 // }
+// int SSL_extract_server_and_client_random_hello(const SSL *ssl, unsigned char *target) {
+//    if (!ssl->s3) return -1;
+//    memcpy(target, ssl->s3->client_random, 32);
+//    memcpy(target+32, ssl->s3->server_random, 32);
+//    return 64;
+// }
+// int SSL_extract_tls_secret(const SSL *ssl, unsigned char *target) {
+//    if (!ssl->session->master_key) return -1;
+//    memcpy(target, ssl->session->master_key, ssl->session->master_key_length);
+//    return ssl->session->master_key_length;
+// }
 import "C"
 
 import (
@@ -42,7 +53,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/spacemonkeygo/openssl/utils"
+	"github.com/tvdw/cgolock"
+	"github.com/tvdw/openssl/utils"
 )
 
 var (
@@ -301,6 +313,8 @@ func (c *Conn) handshake() func() error {
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	cgolock.Lock()
+	defer cgolock.Unlock()
 	rv, errno := C.SSL_do_handshake(c.ssl)
 	if rv > 0 {
 		return nil
@@ -447,7 +461,9 @@ func (c *Conn) read(b []byte) (int, func() error) {
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	cgolock.Lock()
 	rv, errno := C.SSL_read(c.ssl, unsafe.Pointer(&b[0]), C.int(len(b)))
+	cgolock.Unlock()
 	if rv > 0 {
 		return int(rv), nil
 	}
@@ -488,7 +504,9 @@ func (c *Conn) write(b []byte) (int, func() error) {
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	cgolock.Lock()
 	rv, errno := C.SSL_write(c.ssl, unsafe.Pointer(&b[0]), C.int(len(b)))
+	cgolock.Unlock()
 	if rv > 0 {
 		return int(rv), nil
 	}
@@ -565,4 +583,33 @@ func (c *Conn) SetTlsExtHostName(name string) error {
 
 func (c *Conn) VerifyResult() VerifyResult {
 	return VerifyResult(C.SSL_get_verify_result(c.ssl))
+}
+
+func (c *Conn) GetClientServerHelloRandom() []byte {
+	buf := make([]byte, 64)
+
+	st := C.SSL_extract_server_and_client_random_hello(c.ssl, (*C.uchar)(&buf[0]))
+	if st < 0 {
+		return nil
+	}
+	if st != 64 {
+		panic("something went really ,really ,really wrong")
+	}
+
+	return buf
+}
+
+func (c *Conn) GetTLSSecret() []byte {
+	keyLen := int(c.ssl.session.master_key_length)
+	buf := make([]byte, keyLen)
+
+	st := int(C.SSL_extract_tls_secret(c.ssl, (*C.uchar)(&buf[0])))
+	if st < 0 {
+		return nil
+	}
+	if st != keyLen {
+		panic("wtf?")
+	}
+
+	return buf
 }

@@ -15,6 +15,13 @@ static long SSL_CTX_set_tmp_dh_not_a_macro(SSL_CTX* ctx, DH *dh) {
 static long PEM_read_DHparams_not_a_macro(SSL_CTX* ctx, DH *dh) {
     return SSL_CTX_set_tmp_dh(ctx, dh);
 }
+int BN_num_bytes_not_a_macro(const BIGNUM *a) {
+	return BN_num_bytes(a);
+}
+int DH_size_not_a_macro(const DH *a) {
+	return DH_size(a);
+}
+
 */
 import "C"
 
@@ -62,4 +69,57 @@ func (c *Ctx) SetDHParameters(dh *DH) error {
 		return errorFromErrorQueue()
 	}
 	return nil
+}
+
+func LoadDHFromBignumWithGenerator(bytes []byte, generator int) (*DH, error) {
+	if len(bytes) == 0 {
+		return nil, errors.New("empty block")
+	}
+	cdh := C.DH_new()
+	if cdh == nil {
+		return nil, errors.New("couldn't allocate a *DH")
+	}
+
+	dh := &DH{dh: cdh}
+	runtime.SetFinalizer(dh, func(dhparams *DH) {
+		C.DH_free(dhparams.dh)
+	})
+
+	gen := C.BN_new()
+	if gen == nil {
+		return nil, errors.New("something went wrong in openssl")
+	}
+	C.BN_set_word(gen, C.ulong(generator))
+
+	bn := C.BN_bin2bn((*C.uchar)(&bytes[0]), C.int(len(bytes)), nil)
+	if bn == nil {
+		C.BN_free(gen)
+		return nil, errors.New("failed to load the key into memory")
+	}
+
+	dh.dh.g = gen
+	dh.dh.p = bn
+	dh.dh.length = 320
+
+	if C.DH_generate_key(dh.dh) == 0 {
+		return nil, errors.New("Failed to generate a DH key")
+	}
+
+	return dh, nil
+}
+
+func (dh *DH) GetPublicKey() ([]byte, error) {
+	bytes := C.BN_num_bytes_not_a_macro(dh.dh.pub_key)
+	dat := make([]byte, bytes)
+	C.BN_bn2bin(dh.dh.pub_key, (*C.uchar)(&dat[0]))
+	return dat, nil
+}
+
+func (dh *DH) GetSharedKey(challenge []byte) ([]byte, error) {
+	bn := C.BN_bin2bn((*C.uchar)(&challenge[0]), C.int(len(challenge)), nil)
+	dat := make([]byte, C.DH_size_not_a_macro(dh.dh))
+
+	C.DH_compute_key((*C.uchar)(&dat[0]), bn, dh.dh)
+
+	return dat, nil
 }
