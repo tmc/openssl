@@ -10,11 +10,16 @@ import (
 	"errors"
 	"runtime"
 	"unsafe"
+
+	"github.com/tvdw/cgolock"
 )
 
 func (key *pKey) Decrypt(source []byte) ([]byte, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+
+	cgolock.Lock()
+	defer cgolock.Unlock()
 
 	if len(source) == 0 {
 		return nil, errors.New("no data to encrypt")

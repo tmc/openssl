@@ -91,6 +91,7 @@ import (
 	"unsafe"
 
 	"github.com/spacemonkeygo/spacelog"
+	"github.com/tvdw/cgolock"
 )
 
 var (
@@ -115,6 +116,9 @@ func get_ssl_ctx_idx() C.int {
 func newCtx(method *C.SSL_METHOD) (*Ctx, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	ctx := C.SSL_CTX_new(method)
 	if ctx == nil {
 		return nil, errorFromErrorQueue()
@@ -143,6 +147,9 @@ const (
 // NewCtxWithVersion creates an SSL context that is specific to the provided
 // SSL version. See http://www.openssl.org/docs/ssl/SSL_CTX_new.html for more.
 func NewCtxWithVersion(version SSLVersion) (*Ctx, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	var method *C.SSL_METHOD
 	switch version {
 	case SSLv3:
@@ -242,6 +249,9 @@ const (
 // SetEllipticCurve sets the elliptic curve used by the SSL context to
 // enable an ECDH cipher suite to be selected during the handshake.
 func (c *Ctx) SetEllipticCurve(curve EllipticCurve) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -261,6 +271,9 @@ func (c *Ctx) SetEllipticCurve(curve EllipticCurve) error {
 // UseCertificate configures the context to present the given certificate to
 // peers.
 func (c *Ctx) UseCertificate(cert *Certificate) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	c.cert = cert
@@ -273,6 +286,9 @@ func (c *Ctx) UseCertificate(cert *Certificate) error {
 // AddChainCertificate adds a certificate to the chain presented in the
 // handshake.
 func (c *Ctx) AddChainCertificate(cert *Certificate) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	c.chain = append(c.chain, cert)
@@ -285,6 +301,9 @@ func (c *Ctx) AddChainCertificate(cert *Certificate) error {
 // UsePrivateKey configures the context to use the given private key for SSL
 // handshakes.
 func (c *Ctx) UsePrivateKey(key PrivateKey) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	c.key = key
@@ -303,6 +322,9 @@ type CertificateStore struct {
 
 // Allocate a new, empty CertificateStore
 func NewCertificateStore() (*CertificateStore, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	s := C.X509_STORE_new()
 	if s == nil {
 		return nil, errors.New("failed to allocate X509_STORE")
@@ -333,6 +355,9 @@ func (s *CertificateStore) LoadCertificatesFromPEM(data []byte) error {
 // GetCertificateStore returns the context's certificate store that will be
 // used for peer validation.
 func (c *Ctx) GetCertificateStore() *CertificateStore {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	// we don't need to dealloc the cert store pointer here, because it points
 	// to a ctx internal. so we do need to keep the ctx around
 	return &CertificateStore{
@@ -343,6 +368,9 @@ func (c *Ctx) GetCertificateStore() *CertificateStore {
 // AddCertificate marks the provided Certificate as a trusted certificate in
 // the given CertificateStore.
 func (s *CertificateStore) AddCertificate(cert *Certificate) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	s.certs = append(s.certs, cert)
@@ -358,6 +386,9 @@ type CertificateStoreCtx struct {
 }
 
 func (self *CertificateStoreCtx) Err() error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	code := C.X509_STORE_CTX_get_error(self.ctx)
 	if code == C.X509_V_OK {
 		return nil
@@ -373,6 +404,9 @@ func (self *CertificateStoreCtx) Depth() int {
 // the certicate returned is only valid for the lifetime of the underlying
 // X509_STORE_CTX
 func (self *CertificateStoreCtx) GetCurrentCert() *Certificate {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	x509 := C.X509_STORE_CTX_get_current_cert(self.ctx)
 	if x509 == nil {
 		return nil
@@ -393,6 +427,9 @@ func (self *CertificateStoreCtx) GetCurrentCert() *Certificate {
 // See http://www.openssl.org/docs/ssl/SSL_CTX_load_verify_locations.html for
 // more.
 func (c *Ctx) LoadVerifyLocations(ca_file string, ca_path string) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	var c_ca_file, c_ca_path *C.char
@@ -428,11 +465,17 @@ const (
 // SetOptions sets context options. See
 // http://www.openssl.org/docs/ssl/SSL_CTX_set_options.html
 func (c *Ctx) SetOptions(options Options) Options {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return Options(C.SSL_CTX_set_options_not_a_macro(
 		c.ctx, C.long(options)))
 }
 
 func (c *Ctx) ClearOptions(options Options) Options {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return Options(C.SSL_CTX_clear_options_not_a_macro(
 		c.ctx, C.long(options)))
 }
@@ -447,12 +490,18 @@ const (
 // SetMode sets context modes. See
 // http://www.openssl.org/docs/ssl/SSL_CTX_set_mode.html
 func (c *Ctx) SetMode(modes Modes) Modes {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return Modes(C.SSL_CTX_set_mode_not_a_macro(c.ctx, C.long(modes)))
 }
 
 // GetMode returns context modes. See
 // http://www.openssl.org/docs/ssl/SSL_CTX_set_mode.html
 func (c *Ctx) GetMode() Modes {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return Modes(C.SSL_CTX_get_mode_not_a_macro(c.ctx))
 }
 
@@ -491,6 +540,9 @@ func verify_cb_thunk(p unsafe.Pointer, ok C.int, ctx *C.X509_STORE_CTX) C.int {
 // SetVerify controls peer verification settings. See
 // http://www.openssl.org/docs/ssl/SSL_CTX_set_verify.html
 func (c *Ctx) SetVerify(options VerifyOptions, verify_cb VerifyCallback) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	c.verify_cb = verify_cb
 	if verify_cb != nil {
 		C.SSL_CTX_set_verify(c.ctx, C.int(options), (*[0]byte)(C.verify_cb))
@@ -508,6 +560,9 @@ func (c *Ctx) SetVerifyCallback(verify_cb VerifyCallback) {
 }
 
 func (c *Ctx) VerifyMode() VerifyOptions {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return VerifyOptions(C.SSL_CTX_get_verify_mode(c.ctx))
 }
 
@@ -515,10 +570,16 @@ func (c *Ctx) VerifyMode() VerifyOptions {
 // verification logic is willing to follow a certificate chain. See
 // https://www.openssl.org/docs/ssl/SSL_CTX_set_verify.html
 func (c *Ctx) SetVerifyDepth(depth int) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	C.SSL_CTX_set_verify_depth(c.ctx, C.int(depth))
 }
 
 func (c *Ctx) SetSessionId(session_id []byte) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	var ptr *C.uchar
@@ -536,6 +597,9 @@ func (c *Ctx) SetSessionId(session_id []byte) error {
 // described at http://www.openssl.org/docs/apps/ciphers.html, but see
 // http://www.openssl.org/docs/ssl/SSL_CTX_set_cipher_list.html for more.
 func (c *Ctx) SetCipherList(list string) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	clist := C.CString(list)
@@ -562,6 +626,9 @@ const (
 // SetSessionCacheMode enables or disables session caching. See
 // http://www.openssl.org/docs/ssl/SSL_CTX_set_session_cache_mode.html
 func (c *Ctx) SetSessionCacheMode(modes SessionCacheModes) SessionCacheModes {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return SessionCacheModes(
 		C.SSL_CTX_set_session_cache_mode_not_a_macro(c.ctx, C.long(modes)))
 }

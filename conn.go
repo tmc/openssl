@@ -126,6 +126,9 @@ const (
 )
 
 func newSSL(ctx *C.SSL_CTX) (*C.SSL, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	ssl := C.SSL_new(ctx)
@@ -151,6 +154,10 @@ func newConn(conn net.Conn, ctx *Ctx) (*Conn, error) {
 
 	into_ssl_cbio := into_ssl.MakeCBIO()
 	from_ssl_cbio := from_ssl.MakeCBIO()
+
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if into_ssl_cbio == nil || from_ssl_cbio == nil {
 		// these frees are null safe
 		C.BIO_free(into_ssl_cbio)
@@ -194,6 +201,10 @@ func Client(conn net.Conn, ctx *Ctx) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	C.SSL_set_connect_state(c.ssl)
 	return c, nil
 }
@@ -205,11 +216,18 @@ func Server(conn net.Conn, ctx *Ctx) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	C.SSL_set_accept_state(c.ssl)
 	return c, nil
 }
 
 func (c *Conn) CurrentCipher() (string, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	p := C.SSL_get_cipher_name_not_a_macro(c.ssl)
 	if p == nil {
 		return "", errors.New("Session not established")
@@ -279,6 +297,7 @@ func (c *Conn) getErrorHandler(rv C.int, errno error) func() error {
 		}
 	case C.SSL_ERROR_SYSCALL:
 		var err error
+		cgolock.Lock()
 		if C.ERR_peek_error() == 0 {
 			switch rv {
 			case 0:
@@ -288,6 +307,7 @@ func (c *Conn) getErrorHandler(rv C.int, errno error) func() error {
 			default:
 				err = errorFromErrorQueue()
 			}
+			cgolock.Unlock()
 		} else {
 			err = errorFromErrorQueue()
 		}
@@ -359,6 +379,9 @@ func (c *Conn) PeerCertificate() (*Certificate, error) {
 func (c *Conn) PeerCertificateChain() (rv []*Certificate, err error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if c.is_shutdown {
 		return nil, errors.New("connection closed")
 	}
@@ -395,6 +418,9 @@ func (c *Conn) shutdown() func() error {
 	defer c.mtx.Unlock()
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	rv, errno := C.SSL_shutdown(c.ssl)
 	if rv > 0 {
 		return nil
@@ -575,6 +601,9 @@ func (c *Conn) SetTlsExtHostName(name string) error {
 	defer C.free(unsafe.Pointer(cname))
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if C.SSL_set_tlsext_host_name_not_a_macro(c.ssl, cname) == 0 {
 		return errorFromErrorQueue()
 	}
@@ -582,10 +611,16 @@ func (c *Conn) SetTlsExtHostName(name string) error {
 }
 
 func (c *Conn) VerifyResult() VerifyResult {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return VerifyResult(C.SSL_get_verify_result(c.ssl))
 }
 
 func (c *Conn) GetClientServerHelloRandom() []byte {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	buf := make([]byte, 64)
 
 	st := C.SSL_extract_server_and_client_random_hello(c.ssl, (*C.uchar)(&buf[0]))
@@ -600,6 +635,9 @@ func (c *Conn) GetClientServerHelloRandom() []byte {
 }
 
 func (c *Conn) GetTLSSecret() []byte {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	keyLen := int(c.ssl.session.master_key_length)
 	buf := make([]byte, keyLen)
 

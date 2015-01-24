@@ -30,6 +30,8 @@ import (
 	"errors"
 	"runtime"
 	"unsafe"
+
+	"github.com/tvdw/cgolock"
 )
 
 type SHA1Hash struct {
@@ -40,6 +42,9 @@ type SHA1Hash struct {
 func NewSHA1Hash() (*SHA1Hash, error) { return NewSHA1HashWithEngine(nil) }
 
 func NewSHA1HashWithEngine(e *Engine) (*SHA1Hash, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	hash := &SHA1Hash{engine: e}
 	C.EVP_MD_CTX_init(&hash.ctx)
 	runtime.SetFinalizer(hash, func(hash *SHA1Hash) { hash.Close() })
@@ -61,6 +66,9 @@ func engineRef(e *Engine) *C.ENGINE {
 }
 
 func (s *SHA1Hash) Reset() error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if 1 != C.EVP_DigestInit_ex(&s.ctx, C.EVP_sha1(), engineRef(s.engine)) {
 		return errors.New("openssl: sha1: cannot init digest ctx")
 	}
@@ -71,6 +79,9 @@ func (s *SHA1Hash) Write(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if 1 != C.EVP_DigestUpdate(&s.ctx, unsafe.Pointer(&p[0]),
 		C.size_t(len(p))) {
 		return 0, errors.New("openssl: sha1: cannot update digest")
@@ -79,6 +90,9 @@ func (s *SHA1Hash) Write(p []byte) (n int, err error) {
 }
 
 func (s *SHA1Hash) Sum() (result [20]byte, err error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if 1 != C.EVP_DigestFinal_ex(&s.ctx,
 		(*C.uchar)(unsafe.Pointer(&result[0])), nil) {
 		return result, errors.New("openssl: sha1: cannot finalize ctx")

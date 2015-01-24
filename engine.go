@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"runtime"
 	"unsafe"
+
+	"github.com/tvdw/cgolock"
 )
 
 type Engine struct {
@@ -32,6 +34,9 @@ type Engine struct {
 }
 
 func EngineById(name string) (*Engine, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))
 	e := &Engine{

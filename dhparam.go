@@ -29,6 +29,8 @@ import (
 	"errors"
 	"runtime"
 	"unsafe"
+
+	"github.com/tvdw/cgolock"
 )
 
 type DH struct {
@@ -38,6 +40,9 @@ type DH struct {
 // LoadDHParametersFromPEM loads the Diffie-Hellman parameters from
 // a PEM-encoded block.
 func LoadDHParametersFromPEM(pem_block []byte) (*DH, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if len(pem_block) == 0 {
 		return nil, errors.New("empty pem block")
 	}
@@ -65,6 +70,9 @@ func (c *Ctx) SetDHParameters(dh *DH) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if int(C.SSL_CTX_set_tmp_dh_not_a_macro(c.ctx, dh.dh)) != 1 {
 		return errorFromErrorQueue()
 	}
@@ -72,6 +80,9 @@ func (c *Ctx) SetDHParameters(dh *DH) error {
 }
 
 func LoadDHFromBignumWithGenerator(bytes []byte, generator int) (*DH, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if len(bytes) == 0 {
 		return nil, errors.New("empty block")
 	}
@@ -109,6 +120,9 @@ func LoadDHFromBignumWithGenerator(bytes []byte, generator int) (*DH, error) {
 }
 
 func (dh *DH) GetPublicKey() ([]byte, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	bytes := C.BN_num_bytes_not_a_macro(dh.dh.pub_key)
 	dat := make([]byte, bytes)
 	C.BN_bn2bin(dh.dh.pub_key, (*C.uchar)(&dat[0]))
@@ -116,6 +130,9 @@ func (dh *DH) GetPublicKey() ([]byte, error) {
 }
 
 func (dh *DH) GetSharedKey(challenge []byte) ([]byte, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	bn := C.BN_bin2bn((*C.uchar)(&challenge[0]), C.int(len(challenge)), nil)
 	dat := make([]byte, C.DH_size_not_a_macro(dh.dh))
 

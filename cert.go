@@ -30,6 +30,8 @@ import (
 	"runtime"
 	"time"
 	"unsafe"
+
+	"github.com/tvdw/cgolock"
 )
 
 type EVP_MD int
@@ -71,6 +73,9 @@ type Name struct {
 
 // Allocate and return a new Name object.
 func NewName() (*Name, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	n := C.X509_NAME_new()
 	if n == nil {
 		return nil, errors.New("could not create x509 name")
@@ -88,8 +93,11 @@ func (n *Name) AddTextEntry(field, value string) error {
 	defer C.free(unsafe.Pointer(cfield))
 	cvalue := (*C.uchar)(unsafe.Pointer(C.CString(value)))
 	defer C.free(unsafe.Pointer(cvalue))
+
+	cgolock.Lock()
 	ret := C.X509_NAME_add_entry_by_txt(
 		n.name, cfield, C.MBSTRING_ASC, cvalue, -1, -1, 0)
+	cgolock.Unlock()
 	if ret != 1 {
 		return errors.New("failed to add x509 name text entry")
 	}
@@ -109,10 +117,12 @@ func (n *Name) AddTextEntries(entries map[string]string) error {
 // NewCertificate generates a basic certificate based
 // on the provided CertificateInfo struct
 func NewCertificate(info *CertificateInfo, key PublicKey) (*Certificate, error) {
+	cgolock.Lock()
 	c := &Certificate{x: C.X509_new()}
 	runtime.SetFinalizer(c, func(c *Certificate) {
 		C.X509_free(c.x)
 	})
+	cgolock.Unlock()
 
 	name, err := c.GetSubjectName()
 	if err != nil {
@@ -155,6 +165,9 @@ func NewCertificate(info *CertificateInfo, key PublicKey) (*Certificate, error) 
 }
 
 func (c *Certificate) GetSubjectName() (*Name, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	n := C.X509_get_subject_name(c.x)
 	if n == nil {
 		return nil, errors.New("failed to get subject name")
@@ -163,6 +176,9 @@ func (c *Certificate) GetSubjectName() (*Name, error) {
 }
 
 func (c *Certificate) GetIssuerName() (*Name, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	n := C.X509_get_issuer_name(c.x)
 	if n == nil {
 		return nil, errors.New("failed to get issuer name")
@@ -171,6 +187,9 @@ func (c *Certificate) GetIssuerName() (*Name, error) {
 }
 
 func (c *Certificate) SetSubjectName(name *Name) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if C.X509_set_subject_name(c.x, name.name) != 1 {
 		return errors.New("failed to set subject name")
 	}
@@ -195,6 +214,9 @@ func (c *Certificate) SetIssuer(issuer *Certificate) error {
 // SetIssuerName populates the issuer name of a certificate.
 // Use SetIssuer instead, if possible.
 func (c *Certificate) SetIssuerName(name *Name) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if C.X509_set_issuer_name(c.x, name.name) != 1 {
 		return errors.New("failed to set subject name")
 	}
@@ -203,6 +225,9 @@ func (c *Certificate) SetIssuerName(name *Name) error {
 
 // SetSerial sets the serial of a certificate.
 func (c *Certificate) SetSerial(serial int64) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if C.ASN1_INTEGER_set(C.X509_get_serialNumber(c.x), C.long(serial)) != 1 {
 		return errors.New("failed to set serial")
 	}
@@ -211,6 +236,9 @@ func (c *Certificate) SetSerial(serial int64) error {
 
 // SetIssueDate sets the certificate issue date relative to the current time.
 func (c *Certificate) SetIssueDate(when time.Duration) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	offset := C.long(when / time.Second)
 	result := C.X509_gmtime_adj(c.x.cert_info.validity.notBefore, offset)
 	if result == nil {
@@ -221,6 +249,9 @@ func (c *Certificate) SetIssueDate(when time.Duration) error {
 
 // SetExpireDate sets the certificate issue date relative to the current time.
 func (c *Certificate) SetExpireDate(when time.Duration) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	offset := C.long(when / time.Second)
 	result := C.X509_gmtime_adj(c.x.cert_info.validity.notAfter, offset)
 	if result == nil {
@@ -231,6 +262,9 @@ func (c *Certificate) SetExpireDate(when time.Duration) error {
 
 // SetPubKey assigns a new public key to a certificate.
 func (c *Certificate) SetPubKey(pubKey PublicKey) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	c.pubKey = pubKey
 	if C.X509_set_pubkey(c.x, pubKey.evpPKey()) != 1 {
 		return errors.New("failed to set public key")
@@ -241,6 +275,9 @@ func (c *Certificate) SetPubKey(pubKey PublicKey) error {
 // Sign a certificate using a private key and a digest name.
 // Accepted digest names are 'sha256', 'sha384', and 'sha512'.
 func (c *Certificate) Sign(privKey PrivateKey, digest EVP_MD) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	var md *C.EVP_MD
 	switch digest {
 	// please don't use these digest functions
@@ -277,6 +314,9 @@ func (c *Certificate) Sign(privKey PrivateKey, digest EVP_MD) error {
 // Add an extension to a certificate.
 // Extension constants are NID_* as found in openssl.
 func (c *Certificate) AddExtension(nid NID, value string) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	issuer := c
 	if c.Issuer != nil {
 		issuer = c.Issuer
@@ -312,10 +352,13 @@ func LoadCertificateFromPEM(pem_block []byte) (*Certificate, error) {
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+
+	cgolock.Lock()
 	bio := C.BIO_new_mem_buf(unsafe.Pointer(&pem_block[0]),
 		C.int(len(pem_block)))
 	cert := C.PEM_read_bio_X509(bio, nil, nil, nil)
 	C.BIO_free(bio)
+	cgolock.Unlock()
 	if cert == nil {
 		return nil, errorFromErrorQueue()
 	}
@@ -333,10 +376,12 @@ func LoadCertificateFromDER(pem_block []byte) (*Certificate, error) {
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	cgolock.Lock()
 	bio := C.BIO_new_mem_buf(unsafe.Pointer(&pem_block[0]),
 		C.int(len(pem_block)))
 	cert := C.d2i_X509_bio(bio, nil)
 	C.BIO_free(bio)
+	cgolock.Unlock()
 	if cert == nil {
 		return nil, errorFromErrorQueue()
 	}
@@ -349,6 +394,9 @@ func LoadCertificateFromDER(pem_block []byte) (*Certificate, error) {
 
 // MarshalPEM converts the X509 certificate to PEM-encoded format
 func (c *Certificate) MarshalPEM() (pem_block []byte, err error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	bio := C.BIO_new(C.BIO_s_mem())
 	if bio == nil {
 		return nil, errors.New("failed to allocate memory BIO")
@@ -362,6 +410,9 @@ func (c *Certificate) MarshalPEM() (pem_block []byte, err error) {
 
 // MarshalDER converts the X509 certificate to DER-encoded format
 func (c *Certificate) MarshalDER() (pem_block []byte, err error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	bio := C.BIO_new(C.BIO_s_mem())
 	if bio == nil {
 		return nil, errors.New("failed to allocate memory BIO")
@@ -375,6 +426,9 @@ func (c *Certificate) MarshalDER() (pem_block []byte, err error) {
 
 // PublicKey returns the public key embedded in the X509 certificate.
 func (c *Certificate) PublicKey() (PublicKey, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	pkey := C.X509_get_pubkey(c.x)
 	if pkey == nil {
 		return nil, errors.New("no public key found")
@@ -388,6 +442,9 @@ func (c *Certificate) PublicKey() (PublicKey, error) {
 
 // GetSerialNumberHex returns the certificate's serial number in hex format
 func (c *Certificate) GetSerialNumberHex() (serial string) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	asn1_i := C.X509_get_serialNumber(c.x)
 	bignum := C.ASN1_INTEGER_to_BN(asn1_i, nil)
 	hex := C.BN_bn2hex(bignum)

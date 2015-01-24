@@ -44,6 +44,8 @@ import (
 	"io/ioutil"
 	"runtime"
 	"unsafe"
+
+	"github.com/tvdw/cgolock"
 )
 
 type Method *C.EVP_MD
@@ -101,6 +103,9 @@ type pKey struct {
 func (key *pKey) evpPKey() *C.EVP_PKEY { return key.key }
 
 func (key *pKey) SignPKCS1v15(method Method, data []byte) ([]byte, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	var ctx C.EVP_MD_CTX
 	C.EVP_MD_CTX_init(&ctx)
 	defer C.EVP_MD_CTX_cleanup(&ctx)
@@ -124,6 +129,9 @@ func (key *pKey) SignPKCS1v15(method Method, data []byte) ([]byte, error) {
 }
 
 func (key *pKey) PrivateEncrypt(data []byte) ([]byte, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -146,6 +154,9 @@ func (key *pKey) PrivateEncrypt(data []byte) ([]byte, error) {
 }
 
 func (key *pKey) VerifyPKCS1v15(method Method, data, sig []byte) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	var ctx C.EVP_MD_CTX
 	C.EVP_MD_CTX_init(&ctx)
 	defer C.EVP_MD_CTX_cleanup(&ctx)
@@ -168,6 +179,9 @@ func (key *pKey) VerifyPKCS1v15(method Method, data, sig []byte) error {
 
 func (key *pKey) MarshalPKCS1PrivateKeyPEM() (pem_block []byte,
 	err error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	bio := C.BIO_new(C.BIO_s_mem())
 	if bio == nil {
 		return nil, errors.New("failed to allocate memory BIO")
@@ -187,6 +201,9 @@ func (key *pKey) MarshalPKCS1PrivateKeyPEM() (pem_block []byte,
 
 func (key *pKey) MarshalPKCS1PrivateKeyDER() (der_block []byte,
 	err error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	bio := C.BIO_new(C.BIO_s_mem())
 	if bio == nil {
 		return nil, errors.New("failed to allocate memory BIO")
@@ -205,6 +222,9 @@ func (key *pKey) MarshalPKCS1PrivateKeyDER() (der_block []byte,
 
 func (key *pKey) MarshalPKIXPublicKeyPEM() (pem_block []byte,
 	err error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	bio := C.BIO_new(C.BIO_s_mem())
 	if bio == nil {
 		return nil, errors.New("failed to allocate memory BIO")
@@ -223,6 +243,9 @@ func (key *pKey) MarshalPKIXPublicKeyPEM() (pem_block []byte,
 
 func (key *pKey) MarshalPKCS1PublicKeyPEM() (pem_block []byte,
 	err error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	bio := C.BIO_new(C.BIO_s_mem())
 	if bio == nil {
 		return nil, errors.New("failed to allocate memory BIO")
@@ -241,6 +264,9 @@ func (key *pKey) MarshalPKCS1PublicKeyPEM() (pem_block []byte,
 
 func (key *pKey) MarshalPKIXPublicKeyDER() (der_block []byte,
 	err error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	bio := C.BIO_new(C.BIO_s_mem())
 	if bio == nil {
 		return nil, errors.New("failed to allocate memory BIO")
@@ -259,6 +285,9 @@ func (key *pKey) MarshalPKIXPublicKeyDER() (der_block []byte,
 
 func (key *pKey) MarshalPKCS1PublicKeyDER() (der_block []byte,
 	err error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	bio := C.BIO_new(C.BIO_s_mem())
 	if bio == nil {
 		return nil, errors.New("failed to allocate memory BIO")
@@ -277,6 +306,9 @@ func (key *pKey) MarshalPKCS1PublicKeyDER() (der_block []byte,
 
 // LoadPrivateKeyFromPEM loads a private key from a PEM-encoded block.
 func LoadPrivateKeyFromPEM(pem_block []byte) (PrivateKey, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if len(pem_block) == 0 {
 		return nil, errors.New("empty pem block")
 	}
@@ -312,6 +344,9 @@ func LoadPrivateKeyFromPEM(pem_block []byte) (PrivateKey, error) {
 
 // LoadPublicKeyFromPEM loads a public key from a PEM-encoded block.
 func LoadPublicKeyFromPEM(pem_block []byte) (PublicKey, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if len(pem_block) == 0 {
 		return nil, errors.New("empty pem block")
 	}
@@ -347,6 +382,9 @@ func LoadPublicKeyFromPEM(pem_block []byte) (PublicKey, error) {
 
 // LoadPublicKeyFromDER loads a public key from a DER-encoded block.
 func LoadPublicKeyFromDER(der_block []byte) (PublicKey, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if len(der_block) == 0 {
 		return nil, errors.New("empty der block")
 	}
@@ -386,6 +424,9 @@ func GenerateRSAKey(bits int) (PrivateKey, error) {
 }
 
 func GenerateRSAKeyWithExponent(bits int, exponent uint) (PrivateKey, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	rsa := C.RSA_generate_key(C.int(bits), C.ulong(exponent), nil, nil)
 	if rsa == nil {
 		return nil, errors.New("failed to generate RSA key")

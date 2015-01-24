@@ -201,7 +201,9 @@ func (self *writeBio) Disconnect(b *C.BIO) {
 }
 
 func (b *writeBio) MakeCBIO() *C.BIO {
+	cgolock.Lock()
 	rv := C.BIO_new(C.BIO_s_writeBio())
+	cgolock.Unlock()
 	rv.ptr = unsafe.Pointer(b)
 	return rv
 }

@@ -56,6 +56,8 @@ import (
 	"fmt"
 	"runtime"
 	"unsafe"
+
+	"github.com/tvdw/cgolock"
 )
 
 const (
@@ -74,6 +76,9 @@ type Cipher struct {
 }
 
 func (c *Cipher) Nid() NID {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return NID(C.EVP_CIPHER_nid_not_a_macro(c.ptr))
 }
 
@@ -82,18 +87,30 @@ func (c *Cipher) ShortName() (string, error) {
 }
 
 func (c *Cipher) BlockSize() int {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return int(C.EVP_CIPHER_block_size_not_a_macro(c.ptr))
 }
 
 func (c *Cipher) KeySize() int {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return int(C.EVP_CIPHER_key_length_not_a_macro(c.ptr))
 }
 
 func (c *Cipher) IVSize() int {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return int(C.EVP_CIPHER_iv_length_not_a_macro(c.ptr))
 }
 
 func Nid2ShortName(nid NID) (string, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	sn := C.OBJ_nid2sn(C.int(nid))
 	if sn == nil {
 		return "", fmt.Errorf("NID %d not found", nid)
@@ -102,6 +119,9 @@ func Nid2ShortName(nid NID) (string, error) {
 }
 
 func GetCipherByName(name string) (*Cipher, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))
 	p := C.EVP_get_cipherbyname(cname)
@@ -125,6 +145,9 @@ type cipherCtx struct {
 }
 
 func newCipherCtx() (*cipherCtx, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	cctx := C.EVP_CIPHER_CTX_new()
 	if cctx == nil {
 		return nil, errors.New("failed to allocate cipher context")
@@ -152,6 +175,10 @@ func (ctx *cipherCtx) applyKeyAndIV(key, iv []byte) error {
 		}
 		iptr = (*C.uchar)(&iv[0])
 	}
+
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	if kptr != nil || iptr != nil {
 		var res C.int
 		if ctx.ctx.encrypt != 0 {
@@ -167,22 +194,37 @@ func (ctx *cipherCtx) applyKeyAndIV(key, iv []byte) error {
 }
 
 func (ctx *cipherCtx) Cipher() *Cipher {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return &Cipher{ptr: C.EVP_CIPHER_CTX_cipher_not_a_macro(ctx.ctx)}
 }
 
 func (ctx *cipherCtx) BlockSize() int {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return int(C.EVP_CIPHER_CTX_block_size_not_a_macro(ctx.ctx))
 }
 
 func (ctx *cipherCtx) KeySize() int {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return int(C.EVP_CIPHER_CTX_key_length_not_a_macro(ctx.ctx))
 }
 
 func (ctx *cipherCtx) IVSize() int {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	return int(C.EVP_CIPHER_CTX_iv_length_not_a_macro(ctx.ctx))
 }
 
 func (ctx *cipherCtx) setCtrl(code, arg int) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg), nil)
 	if res != 1 {
 		return fmt.Errorf("failed to set code %d to %d [result %d]",
@@ -192,6 +234,9 @@ func (ctx *cipherCtx) setCtrl(code, arg int) error {
 }
 
 func (ctx *cipherCtx) setCtrlBytes(code, arg int, value []byte) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg),
 		unsafe.Pointer(&value[0]))
 	if res != 1 {
@@ -202,6 +247,9 @@ func (ctx *cipherCtx) setCtrlBytes(code, arg int, value []byte) error {
 }
 
 func (ctx *cipherCtx) getCtrlInt(code, arg int) (int, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	var returnVal C.int
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg),
 		unsafe.Pointer(&returnVal))
@@ -213,6 +261,9 @@ func (ctx *cipherCtx) getCtrlInt(code, arg int) (int, error) {
 }
 
 func (ctx *cipherCtx) getCtrlBytes(code, arg, expectsize int) ([]byte, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	returnVal := make([]byte, expectsize)
 	res := C.EVP_CIPHER_CTX_ctrl(ctx.ctx, C.int(code), C.int(arg),
 		unsafe.Pointer(&returnVal[0]))
@@ -269,9 +320,14 @@ func newEncryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
 	if e != nil {
 		eptr = e.e
 	}
-	if 1 != C.EVP_EncryptInit_ex(ctx.ctx, c.ptr, eptr, nil, nil) {
+
+	cgolock.Lock()
+	res := C.EVP_EncryptInit_ex(ctx.ctx, c.ptr, eptr, nil, nil)
+	cgolock.Unlock()
+	if res != 1 {
 		return nil, errors.New("failed to initialize cipher context")
 	}
+
 	err = ctx.applyKeyAndIV(key, iv)
 	if err != nil {
 		return nil, err
@@ -292,7 +348,10 @@ func newDecryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
 	if e != nil {
 		eptr = e.e
 	}
-	if 1 != C.EVP_DecryptInit_ex(ctx.ctx, c.ptr, eptr, nil, nil) {
+	cgolock.Lock()
+	res := C.EVP_DecryptInit_ex(ctx.ctx, c.ptr, eptr, nil, nil)
+	cgolock.Unlock()
+	if res != 1 {
 		return nil, errors.New("failed to initialize cipher context")
 	}
 	err = ctx.applyKeyAndIV(key, iv)
@@ -313,6 +372,9 @@ func NewDecryptionCipherCtx(c *Cipher, e *Engine, key, iv []byte) (
 }
 
 func (ctx *encryptionCipherCtx) EncryptUpdate(input []byte) ([]byte, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	outbuf := make([]byte, len(input)+ctx.BlockSize())
 	outlen := C.int(len(outbuf))
 	res := C.EVP_EncryptUpdate(ctx.ctx, (*C.uchar)(&outbuf[0]), &outlen,
@@ -324,6 +386,9 @@ func (ctx *encryptionCipherCtx) EncryptUpdate(input []byte) ([]byte, error) {
 }
 
 func (ctx *decryptionCipherCtx) DecryptUpdate(input []byte) ([]byte, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	outbuf := make([]byte, len(input)+ctx.BlockSize())
 	outlen := C.int(len(outbuf))
 	res := C.EVP_DecryptUpdate(ctx.ctx, (*C.uchar)(&outbuf[0]), &outlen,
@@ -335,6 +400,9 @@ func (ctx *decryptionCipherCtx) DecryptUpdate(input []byte) ([]byte, error) {
 }
 
 func (ctx *encryptionCipherCtx) EncryptFinal() ([]byte, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	outbuf := make([]byte, ctx.BlockSize())
 	var outlen C.int
 	if 1 != C.EVP_EncryptFinal_ex(ctx.ctx, (*C.uchar)(&outbuf[0]), &outlen) {
@@ -344,6 +412,9 @@ func (ctx *encryptionCipherCtx) EncryptFinal() ([]byte, error) {
 }
 
 func (ctx *decryptionCipherCtx) DecryptFinal() ([]byte, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	outbuf := make([]byte, ctx.BlockSize())
 	var outlen C.int
 	if 1 != C.EVP_DecryptFinal_ex(ctx.ctx, (*C.uchar)(&outbuf[0]), &outlen) {

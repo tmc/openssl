@@ -39,6 +39,8 @@ import (
 	"errors"
 	"net"
 	"unsafe"
+
+	"github.com/tvdw/cgolock"
 )
 
 var (
@@ -58,6 +60,9 @@ const (
 // Specifically returns ValidationError if the Certificate didn't match but
 // there was no internal error.
 func (c *Certificate) CheckHost(host string, flags CheckFlags) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	chost := unsafe.Pointer(C.CString(host))
 	defer C.free(chost)
 	rv := C.X509_check_host(c.x, (*C.uchar)(chost), C.size_t(len(host)),
@@ -77,6 +82,9 @@ func (c *Certificate) CheckHost(host string, flags CheckFlags) error {
 // Specifically returns ValidationError if the Certificate didn't match but
 // there was no internal error.
 func (c *Certificate) CheckEmail(email string, flags CheckFlags) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	cemail := unsafe.Pointer(C.CString(email))
 	defer C.free(cemail)
 	rv := C.X509_check_email(c.x, (*C.uchar)(cemail), C.size_t(len(email)),
@@ -96,6 +104,9 @@ func (c *Certificate) CheckEmail(email string, flags CheckFlags) error {
 // Specifically returns ValidationError if the Certificate didn't match but
 // there was no internal error.
 func (c *Certificate) CheckIP(ip net.IP, flags CheckFlags) error {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	cip := unsafe.Pointer(&ip[0])
 	rv := C.X509_check_ip(c.x, (*C.uchar)(cip), C.size_t(len(ip)),
 		C.uint(flags))

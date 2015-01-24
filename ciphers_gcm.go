@@ -22,6 +22,8 @@ import "C"
 import (
 	"errors"
 	"fmt"
+
+	"github.com/tvdw/cgolock"
 )
 
 type AuthenticatedEncryptionCipherCtx interface {
@@ -58,6 +60,9 @@ type authDecryptionCipherCtx struct {
 }
 
 func getGCMCipher(blocksize int) (*Cipher, error) {
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	var cipherptr *C.EVP_CIPHER
 	switch blocksize {
 	case 256:
@@ -83,6 +88,9 @@ func NewGCMEncryptionCipherCtx(blocksize int, e *Engine, key, iv []byte) (
 		return nil, err
 	}
 	if len(iv) > 0 {
+		cgolock.Lock()
+		defer cgolock.Unlock()
+
 		err := ctx.setCtrl(C.EVP_CTRL_GCM_SET_IVLEN, len(iv))
 		if err != nil {
 			return nil, fmt.Errorf("could not set IV len to %d: %s",
@@ -107,6 +115,9 @@ func NewGCMDecryptionCipherCtx(blocksize int, e *Engine, key, iv []byte) (
 		return nil, err
 	}
 	if len(iv) > 0 {
+		cgolock.Lock()
+		defer cgolock.Unlock()
+
 		err := ctx.setCtrl(C.EVP_CTRL_GCM_SET_IVLEN, len(iv))
 		if err != nil {
 			return nil, fmt.Errorf("could not set IV len to %d: %s",
@@ -124,6 +135,10 @@ func (ctx *authEncryptionCipherCtx) ExtraData(aad []byte) error {
 	if aad == nil {
 		return nil
 	}
+
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	var outlen C.int
 	if 1 != C.EVP_EncryptUpdate(ctx.ctx, nil, &outlen, (*C.uchar)(&aad[0]),
 		C.int(len(aad))) {
@@ -136,6 +151,10 @@ func (ctx *authDecryptionCipherCtx) ExtraData(aad []byte) error {
 	if aad == nil {
 		return nil
 	}
+
+	cgolock.Lock()
+	defer cgolock.Unlock()
+
 	var outlen C.int
 	if 1 != C.EVP_DecryptUpdate(ctx.ctx, nil, &outlen, (*C.uchar)(&aad[0]),
 		C.int(len(aad))) {
