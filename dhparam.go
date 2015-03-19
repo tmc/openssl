@@ -18,6 +18,9 @@ static long PEM_read_DHparams_not_a_macro(SSL_CTX* ctx, DH *dh) {
 int BN_num_bytes_not_a_macro(const BIGNUM *a) {
 	return BN_num_bytes(a);
 }
+int BN_set_word_not_a_macro(BIGNUM *a, unsigned long w) {
+	return BN_set_word(a, w);
+}
 int DH_size_not_a_macro(const DH *a) {
 	return DH_size(a);
 }
@@ -100,7 +103,7 @@ func LoadDHFromBignumWithGenerator(bytes []byte, generator int) (*DH, error) {
 	if gen == nil {
 		return nil, errors.New("something went wrong in openssl")
 	}
-	C.BN_set_word(gen, C.ulong(generator))
+	C.BN_set_word_not_a_macro(gen, C.ulong(generator))
 
 	bn := C.BN_bin2bn((*C.uchar)(&bytes[0]), C.int(len(bytes)), nil)
 	if bn == nil {
