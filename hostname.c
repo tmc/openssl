@@ -346,14 +346,14 @@ static int do_x509_check(X509 *x, const unsigned char *chk, size_t chklen,
 	return 0;
 	}
 
-int X509_check_host(X509 *x, const unsigned char *chk, size_t chklen,
-					unsigned int flags)
+int X509_check_host(X509 *x, const char *chk, size_t chklen,
+                    unsigned int flags, char **peername)
 	{
 	return do_x509_check(x, chk, chklen, flags, GEN_DNS);
 	}
 
-int X509_check_email(X509 *x, const unsigned char *chk, size_t chklen,
-					unsigned int flags)
+int X509_check_email(X509 *x, const char *chk, size_t chklen,
+                     unsigned int flags)
 	{
 	return do_x509_check(x, chk, chklen, flags, GEN_EMAIL);
 	}

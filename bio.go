@@ -17,6 +17,8 @@
 package openssl
 
 /*
+#cgo CFLAGS: -I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib
+#cgo LDFLAGS: -L/usr/local/opt/openssl/lib
 #include <string.h>
 #include <openssl/bio.h>
 
@@ -66,11 +68,12 @@ import "C"
 
 import (
 	"errors"
-	"github.com/tvdw/cgolock"
 	"io"
 	"reflect"
 	"sync"
 	"unsafe"
+
+	"github.com/tvdw/cgolock"
 )
 
 const (
